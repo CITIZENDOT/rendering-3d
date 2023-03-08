@@ -1,0 +1,1 @@
+https://unpkg.com/three@0.150.1/examples/jsm/libs/basis/basis_transcoder.js

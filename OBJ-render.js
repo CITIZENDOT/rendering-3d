@@ -43,12 +43,6 @@ function initialize(nodeIndex) {
   return [camera, scene, renderer, orbitControls];
 }
 
-function setControls(camera, renderer) {
-  const objControls = new OrbitControls(camera, renderer.domElement);
-  camera.position.z = 5;
-  objControls.update();
-}
-
 function animate(camera, scene, renderer, orbitControls) {
   requestAnimationFrame(function (timestamp) {
     animate(camera, scene, renderer, orbitControls);
@@ -73,6 +67,11 @@ loader.load(
   function (object) {
     object.name = "model";
     scene.add(object);
+    object.traverse(function (node) {
+      if (node.isMesh) {
+        console.log(node.name);
+      }
+    });
   },
   function (xhr) {
     console.log((xhr.loaded / xhr.total) * 100 + "% loaded");
@@ -82,7 +81,6 @@ loader.load(
   }
 );
 
-setControls(camera, renderer);
 animate(camera, scene, renderer, orbitControls);
 
-export { initialize, setControls, animate };
+export { initialize, animate };

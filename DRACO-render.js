@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { DRACOLoader } from "DRACOLoader";
-import { initialize, setControls, animate } from "./OBJ-render.js";
+import { initialize, animate } from "./OBJ-render.js";
 
 const [camera, scene, renderer, orbitControls] = initialize(1);
 
@@ -24,5 +24,4 @@ loader.load(
   }
 );
 
-setControls(camera, renderer);
 animate(camera, scene, renderer, orbitControls);
