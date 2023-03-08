@@ -1,0 +1,10 @@
+.col {
+    display: inline !important;
+}
+
+#root {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    justify-content: space-around;
+}
