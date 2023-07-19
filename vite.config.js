@@ -3,8 +3,7 @@ import { defineConfig } from 'vite'
 
 export default defineConfig(({ command }) => {
   const config = {
-    plugins: [react()],
-    base: '/rendering-3d/',
+    plugins: [react()]
   }
 
   return config

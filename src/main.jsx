@@ -17,7 +17,7 @@ const router = createBrowserRouter([
     path: '/measure-ktx2',
     element: <Benchmark />,
     errorElement: <ErrorPage />
-  }, { basename: '/rendering-3d' }
+  }
 ])
 
 ReactDOM.createRoot(document.getElementById('root')).render(
