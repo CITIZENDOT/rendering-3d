@@ -21,11 +21,26 @@ export default function ErrorPage() {
   const [computedStats, setComputedStats] = useState({
     computed: false,
     transcodingTime: '',
+    playTime: '',
     transcodingDeviation: '',
     fileSize: '',
     fileSizeDeviation: '',
     requiredFetchSpeed: ''
   })
+
+  useEffect(() => {
+    if (!computedStats.computed) return
+
+    const playTime = 1000 * (userData.frameCount / userData.frameRate) // in milliseconds
+    const maxFetchTime = (playTime - computedStats.transcodingTime) / 1000 // in seconds
+    const minimumSpeed = computedStats.fileSize / maxFetchTime
+    setComputedStats({
+      ...computedStats,
+      playTime: playTime,
+      requiredFetchSpeed: minimumSpeed
+    })
+
+  }, [userData])
 
   const [openFileSelector, { filesContent }] = useFilePicker({
     readAs: 'ArrayBuffer',
@@ -78,11 +93,12 @@ export default function ErrorPage() {
         const minimumSpeed = avgFileSize / maxFetchTime
         setComputedStats({
           computed: true,
-          transcodingTime: `${round2(avgTranscodingTime)} ms`,
-          transcodingDeviation: isNaN(transcodingDev) ? 0 : `${round2((transcodingDev / avgTranscodingTime) * 100)} %`,
-          fileSize: prettyBytes(Math.ceil(avgFileSize)),
-          fileSizeDeviation: isNaN(fileSizeDev) ? 0 : `${round2((fileSizeDev / avgFileSize) * 100)} %`,
-          requiredFetchSpeed: prettyBytes(minimumSpeed) + '/sec'
+          transcodingTime: avgTranscodingTime,
+          transcodingDeviation: isNaN(transcodingDev) ? 0 : (transcodingDev / avgTranscodingTime) * 100,
+          fileSize: avgFileSize,
+          playTime: playTime,
+          fileSizeDeviation: isNaN(fileSizeDev) ? 0 : round2((fileSizeDev / avgFileSize) * 100),
+          requiredFetchSpeed: minimumSpeed
         })
         return
       }
@@ -140,6 +156,7 @@ export default function ErrorPage() {
                       onChange={(e) => setUserData({ ...userData, frameRate: parseInt(e.target.value) })}
                       type="number"
                       placeholder="FrameRate"
+                      min={1}
                     />
                   </FloatingLabel>
                 </Col>
@@ -151,21 +168,24 @@ export default function ErrorPage() {
                     <Alert variant="info">
                       <Alert.Heading>Computed Stats</Alert.Heading>
                       <ListGroup>
-                        <ListGroup.Item variant="info">
-                          Average Transcoding Time: <b>{computedStats.transcodingTime}</b>
+                        <ListGroup.Item variant={computedStats.transcodingTime < computedStats.playTime ? "info" : "danger"}>
+                          Average Transcoding Time (per file): <b>{`${round2(computedStats.transcodingTime)} ms`}</b>
                         </ListGroup.Item>
                         <ListGroup.Item variant="info">
-                          Deviation in Transcoding time: <b>{computedStats.transcodingDeviation}</b>
+                          Average Time to play a texture file: <b>{`${round2(computedStats.playTime)} ms`}</b>
                         </ListGroup.Item>
                         <ListGroup.Item variant="info">
-                          Average File size: <b>{computedStats.fileSize}</b>
+                          Deviation in Transcoding time: <b>{`${round2(computedStats.transcodingDeviation)} %`}</b>
                         </ListGroup.Item>
                         <ListGroup.Item variant="info">
-                          Deviation in File size: <b>{computedStats.fileSizeDeviation}</b>
+                          Average File size: <b>{prettyBytes(Math.ceil(computedStats.fileSize))}</b>
                         </ListGroup.Item>
                         <ListGroup.Item variant="info">
+                          Deviation in File size: <b>{`${round2(computedStats.fileSizeDeviation)} %`}</b>
+                        </ListGroup.Item>
+                        <ListGroup.Item variant={computedStats.requiredFetchSpeed > 0 ? 'info' : 'danger'}>
                           Minimum Internet Speed required to play UVOL using these textures:{' '}
-                          <b>{computedStats.requiredFetchSpeed}</b>
+                          <b>{prettyBytes(computedStats.requiredFetchSpeed) + '/sec'}</b>
                         </ListGroup.Item>
                       </ListGroup>
                     </Alert>
