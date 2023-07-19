@@ -382,7 +382,7 @@ function App() {
         >
           3D test bench
         </h1>
-        <a href="/measure-ktx2">
+        <a href="measure-ktx2">
           <h4
             style={{
               textAlign: 'center'
