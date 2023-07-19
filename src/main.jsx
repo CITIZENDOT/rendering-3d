@@ -18,7 +18,7 @@ const router = createBrowserRouter([
     element: <Benchmark />,
     errorElement: <ErrorPage />
   }
-])
+], { basename: import.meta.env.DEV ? '/' : '/rendering-3d/' })
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
