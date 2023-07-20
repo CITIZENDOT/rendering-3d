@@ -20,6 +20,7 @@ import { DRACOLoader } from 'three/addons/loaders/DRACOLoader'
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader'
 import { useFilePicker } from 'use-file-picker'
+import { getBufferCopy, getTruncatedText } from "./utils"
 
 import './App.css'
 
@@ -46,18 +47,7 @@ void main() {
     ${ShaderChunk.logdepthbuf_fragment}
 }`
 
-function getBufferCopy(buffer) {
-  const bufferCopy = new ArrayBuffer(buffer.byteLength)
-  new Uint8Array(bufferCopy).set(new Uint8Array(buffer))
-  return bufferCopy
-}
 
-function getTruncatedText(text, maxLength) {
-  if (text.length > maxLength) {
-    return text.substring(0, maxLength - 3) + '...'
-  }
-  return text
-}
 
 function GeometryComponent({ scale, setScale, setGeometry }) {
   const [errors, setErrors] = useState([])

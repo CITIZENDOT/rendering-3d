@@ -5,13 +5,16 @@ import stats from 'stats-lite'
 import { WebGLRenderer } from 'three'
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader'
 import { useFilePicker } from 'use-file-picker'
+import { getBufferCopy } from '../utils'
 
 function round2(n) {
   return Math.round(n * 100) / 100
 }
 
-export default function ErrorPage() {
+export default function Benchmark() {
   const [errors, setErrors] = useState([])
+
+  const [isSynchronous, setIsSynchronous] = useState(false)
 
   const [userData, setUserData] = useState({
     frameCount: 7 /* in a single file */,
@@ -20,12 +23,15 @@ export default function ErrorPage() {
 
   const [computedStats, setComputedStats] = useState({
     computed: false,
-    transcodingTime: '',
-    playTime: '',
-    transcodingDeviation: '',
-    fileSize: '',
-    fileSizeDeviation: '',
-    requiredFetchSpeed: ''
+    transcodingTime: 0,
+    playTime: 0,
+    transcodingDeviation: 0,
+    fileSize: 0,
+    fileSizeDeviation: 0,
+    requiredFetchSpeed: 0,
+    totalTranscodingTime: 0,
+    totalFileSize: 0,
+    totalPlayTime: 0,
   })
 
   useEffect(() => {
@@ -51,14 +57,18 @@ export default function ErrorPage() {
   /*
     {
       name: string,
-      size: string,
-      mipmapSize: string,
+      size: number,
+      mipmapSize: number,
       transcodingTime: number
     }
    */
 
   useEffect(() => {
     if (!filesContent.length) return
+    setComputedStats({
+      ...computedStats,
+      computed: false,
+    })
 
     const newState = []
     filesContent.forEach((el) => {
@@ -76,53 +86,92 @@ export default function ErrorPage() {
     loader.setTranscoderPath('https://unpkg.com/three@0.153.0/examples/jsm/libs/basis/')
     loader.detectSupport(renderer)
 
-    const updateData = async (index) => {
-      if (index == filesContent.length) {
-        /**
-         * We reached end of the array.
-         * Calculate statistics now.
-         */
-        const transcodingTimes = newState.map((el) => el.transcodingTime)
-        const avgTranscodingTime = stats.mean(transcodingTimes) // in milliseconds
-        const transcodingDev = stats.stdev(transcodingTimes)
-        const fileSizes = newState.map((el) => el.size)
-        const avgFileSize = stats.mean(fileSizes)
-        const fileSizeDev = stats.stdev(avgFileSize)
-        const playTime = 1000 * (userData.frameCount / userData.frameRate) // in milliseconds
-        const maxFetchTime = (playTime - avgTranscodingTime) / 1000 // in seconds
-        const minimumSpeed = avgFileSize / maxFetchTime
-        setComputedStats({
-          computed: true,
-          transcodingTime: avgTranscodingTime,
-          transcodingDeviation: isNaN(transcodingDev) ? 0 : (transcodingDev / avgTranscodingTime) * 100,
-          fileSize: avgFileSize,
-          playTime: playTime,
-          fileSizeDeviation: isNaN(fileSizeDev) ? 0 : round2((fileSizeDev / avgFileSize) * 100),
-          requiredFetchSpeed: minimumSpeed
-        })
-        return
+    const bufferCopies = []
+    filesContent.forEach((value) => {
+      bufferCopies.push(getBufferCopy(value.content))
+    })
+
+    if (isSynchronous) {
+      const updateData = async (index) => {
+        if (index == filesContent.length) {
+          /**
+           * We reached end of the array.
+           * Calculate statistics now.
+           */
+          const transcodingTimes = newState.map((el) => el.transcodingTime)
+          const avgTranscodingTime = stats.mean(transcodingTimes) // in milliseconds
+          const transcodingDev = stats.stdev(transcodingTimes)
+          const fileSizes = newState.map((el) => el.size)
+          const avgFileSize = stats.mean(fileSizes)
+          const fileSizeDev = stats.stdev(avgFileSize)
+          const playTime = 1000 * (userData.frameCount / userData.frameRate) // in milliseconds
+          const maxFetchTime = (playTime - avgTranscodingTime) / 1000 // in seconds
+          const minimumSpeed = avgFileSize / maxFetchTime
+          setComputedStats({
+            ...computedStats,
+            computed: true,
+            transcodingTime: avgTranscodingTime,
+            transcodingDeviation: isNaN(transcodingDev) ? 0 : (transcodingDev / avgTranscodingTime) * 100,
+            fileSize: avgFileSize,
+            playTime: playTime,
+            fileSizeDeviation: isNaN(fileSizeDev) ? 0 : round2((fileSizeDev / avgFileSize) * 100),
+            requiredFetchSpeed: minimumSpeed
+          })
+          return
+        }
+        const startTime = Date.now()
+        try {
+          const texture = await loader._createTexture(bufferCopies[index])
+          const finishTime = Date.now()
+          newState[index].mipmapSize = prettyBytes(texture.mipmaps[0].data.length)
+          newState[index].transcodingTime = finishTime - startTime
+          setState([...newState])
+          updateData(index + 1)
+        } catch (err) {
+          console.error(err)
+          setErrors([...errors, err.message])
+        }
       }
-      const startTime = Date.now()
-      try {
-        const texture = await loader._createTexture(filesContent[index].content)
-        const finishTime = Date.now()
+      updateData(0)
+    } else {
+      const updateData = async (index) => {
+        const texture = await loader._createTexture(bufferCopies[index])
         newState[index].mipmapSize = prettyBytes(texture.mipmaps[0].data.length)
-        newState[index].transcodingTime = finishTime - startTime
         setState([...newState])
-        updateData(index + 1)
-      } catch (err) {
-        console.error(err)
-        setErrors([...errors, err.message])
       }
+
+      const promises = []
+
+      const startTime = Date.now()
+      for (let i = 0; i < newState.length; i++) {
+        promises.push(updateData(i))
+      }
+
+      Promise.all(promises)
+        .then(() => {
+          const finishTime = Date.now()
+
+          const totalTranscodingTime = finishTime - startTime // milliseconds
+          const totalPlayTime = (newState.length * userData.frameCount * 1000) / userData.frameRate // milliseconds
+          const totalFetchTime = (totalPlayTime - totalTranscodingTime) / 1000 // seconds
+          const totalFileSize = newState.reduce((prevSum, current) => prevSum + current.size, 0)
+          const requiredFetchSpeed = totalFileSize / totalFetchTime
+
+          setComputedStats({
+            ...computedStats,
+            computed: true,
+            totalTranscodingTime: totalTranscodingTime,
+            totalFileSize: totalFileSize,
+            totalPlayTime: totalPlayTime,
+            requiredFetchSpeed: requiredFetchSpeed
+          })
+        })
     }
-    updateData(0)
+
+
 
     loader.dispose()
-  }, [filesContent])
-
-  useEffect(() => {
-    console.log(computedStats)
-  }, [computedStats])
+  }, [filesContent, isSynchronous])
 
   return (
     <Container>
@@ -134,9 +183,24 @@ export default function ErrorPage() {
               <Card.Subtitle>
                 Also calculates estimated internet speed required to play UVOL2 without buffering
               </Card.Subtitle>
-              <Button className="m-2" onClick={() => openFileSelector()}>
-                Upload KTX2 files (multiple files allowed)
-              </Button>
+
+              <Row xs={1} sm={2}>
+                <Col>
+                  <Button className="m-2" onClick={() => openFileSelector()}>
+                    Upload KTX2 files (multiple files allowed)
+                  </Button>
+                </Col>
+                <Col>
+                  <Form.Check // prettier-ignore
+                    type="switch"
+                    inline
+                    label="Synchronous"
+                    className='m-2'
+                    value={isSynchronous}
+                    onChange={() => setIsSynchronous(!isSynchronous)}
+                  />
+                </Col>
+              </Row>
 
               <Row>
                 <Col>
@@ -165,7 +229,7 @@ export default function ErrorPage() {
               <Row className="mt-2">
                 <Col>
                   {computedStats.computed ? (
-                    <Alert variant="info">
+                    isSynchronous ? (<Alert variant="info">
                       <Alert.Heading>Computed Stats</Alert.Heading>
                       <ListGroup>
                         <ListGroup.Item variant={computedStats.transcodingTime < computedStats.playTime ? "info" : "danger"}>
@@ -188,7 +252,26 @@ export default function ErrorPage() {
                           <b>{prettyBytes(computedStats.requiredFetchSpeed) + '/sec'}</b>
                         </ListGroup.Item>
                       </ListGroup>
-                    </Alert>
+                    </Alert>) : (
+                      <Alert variant="info">
+                        <Alert.Heading>Computed Stats</Alert.Heading>
+                        <ListGroup>
+                          <ListGroup.Item variant={computedStats.totalTranscodingTime < computedStats.totalPlayTime ? "info" : "danger"}>
+                            Total Transcoding time: <b>{`${round2(computedStats.totalTranscodingTime)} ms`}</b>
+                          </ListGroup.Item>
+                          <ListGroup.Item variant="info">
+                            Total Play time: <b>{`${round2(computedStats.totalPlayTime)} ms`}</b>
+                          </ListGroup.Item>
+                          <ListGroup.Item variant="info">
+                            Total Files size: <b>{prettyBytes(Math.ceil(computedStats.totalFileSize))}</b>
+                          </ListGroup.Item>
+                          <ListGroup.Item variant={computedStats.requiredFetchSpeed > 0 ? 'info' : 'danger'}>
+                            Minimum Internet Speed required to play UVOL using these textures:{' '}
+                            <b>{prettyBytes(computedStats.requiredFetchSpeed) + '/sec'}</b>
+                          </ListGroup.Item>
+                        </ListGroup>
+                      </Alert>
+                    )
                   ) : null}
                 </Col>
               </Row>
@@ -219,7 +302,7 @@ export default function ErrorPage() {
                       <th>Filename</th>
                       <th>File Size</th>
                       <th>Mipmaps Size</th>
-                      <th>Transcoding Time</th>
+                      {isSynchronous ? <th>Transcoding Time</th> : null}
                     </tr>
                   </thead>
                   <tbody>
@@ -229,7 +312,7 @@ export default function ErrorPage() {
                           <td>{row.name}</td>
                           <td>{prettyBytes(row.size)}</td>
                           <td>{row.mipmapSize ? row.mipmapSize : 'Loading...'}</td>
-                          <td>{row.transcodingTime ? `${row.transcodingTime} ms` : 'Loading...'}</td>
+                          {isSynchronous ? <td>{row.transcodingTime ? `${row.transcodingTime} ms` : 'Loading...'}</td> : null}
                         </tr>
                       )
                     })}
