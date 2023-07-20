@@ -37,14 +37,25 @@ export default function Benchmark() {
   useEffect(() => {
     if (!computedStats.computed) return
 
-    const playTime = 1000 * (userData.frameCount / userData.frameRate) // in milliseconds
-    const maxFetchTime = (playTime - computedStats.transcodingTime) / 1000 // in seconds
-    const minimumSpeed = computedStats.fileSize / maxFetchTime
-    setComputedStats({
-      ...computedStats,
-      playTime: playTime,
-      requiredFetchSpeed: minimumSpeed
-    })
+    if (isSynchronous) {
+      const playTime = 1000 * (userData.frameCount / userData.frameRate) // in milliseconds
+      const maxFetchTime = (playTime - computedStats.transcodingTime) / 1000 // in seconds
+      const minimumSpeed = computedStats.fileSize / maxFetchTime
+      setComputedStats({
+        ...computedStats,
+        playTime: playTime,
+        requiredFetchSpeed: minimumSpeed
+      })
+    } else {
+      const totalPlayTime = (state.length * userData.frameCount * 1000) / userData.frameRate // milliseconds
+      const totalFetchTime = (totalPlayTime - computedStats.totalTranscodingTime) / 1000 // seconds
+      const requiredFetchSpeed = computedStats.totalFileSize / totalFetchTime
+      setComputedStats({
+        ...computedStats,
+        totalPlayTime: totalPlayTime,
+        requiredFetchSpeed: requiredFetchSpeed
+      })
+    }
 
   }, [userData])
 
