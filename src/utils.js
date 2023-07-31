@@ -10,3 +10,7 @@ export function getTruncatedText(text, maxLength) {
   }
   return text
 }
+
+export function round2(n) {
+  return Math.round(n * 100) / 100
+}
